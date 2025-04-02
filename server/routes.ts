@@ -87,18 +87,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new persona
   app.post("/api/personas", async (req: Request, res: Response) => {
     try {
-      console.log("Creating persona with data:", JSON.stringify(req.body, null, 2));
-      const result = insertPersonaSchema.safeParse(req.body);
+      // Add the default userId to the request body before validation
+      const dataWithUserId = {
+        ...req.body,
+        userId: defaultUserId
+      };
+      
+      console.log("Creating persona with data:", JSON.stringify(dataWithUserId, null, 2));
+      const result = insertPersonaSchema.safeParse(dataWithUserId);
       
       if (!result.success) {
         console.error("Validation failed:", result.error.format());
         return res.status(400).json({ message: "Invalid persona data", errors: result.error.format() });
       }
       
-      const persona = await storage.createPersona({
-        ...result.data,
-        userId: defaultUserId
-      });
+      const persona = await storage.createPersona(result.data);
       
       // Create a conversation for this persona
       await storage.createConversation({
