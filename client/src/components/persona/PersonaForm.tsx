@@ -53,6 +53,7 @@ export default function PersonaForm({ personaTemplates, persona, isEditing = fal
     defaultValues: persona ? {
       ...persona,
       templateId: persona.templateId,
+      traits: persona.traits as any,
       whatsappNumber: persona.whatsappNumber || ""
     } : {
       name: "",
@@ -79,7 +80,7 @@ export default function PersonaForm({ personaTemplates, persona, isEditing = fal
       form.setValue("name", selectedTemplate.name);
       form.setValue("tagline", `The ${selectedTemplate.description.split(',')[0].toLowerCase()}`);
       form.setValue("avatarIcon", selectedTemplate.avatarIcon);
-      form.setValue("traits", selectedTemplate.defaultTraits);
+      form.setValue("traits", selectedTemplate.defaultTraits as any);
       setInterests(selectedTemplate.defaultInterests);
     }
   }, [selectedTemplate, form, isEditing]);
@@ -158,8 +159,14 @@ export default function PersonaForm({ personaTemplates, persona, isEditing = fal
       
       // Redirect to dashboard
       setLocation("/");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving persona:", error);
+      
+      // If the error contains a response with error details, log them
+      if (error.response?.data) {
+        console.error("Validation errors:", error.response.data);
+      }
+      
       toast({
         title: "Error saving persona",
         description: "Please try again later.",

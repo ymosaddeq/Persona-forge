@@ -87,9 +87,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new persona
   app.post("/api/personas", async (req: Request, res: Response) => {
     try {
+      console.log("Creating persona with data:", JSON.stringify(req.body, null, 2));
       const result = insertPersonaSchema.safeParse(req.body);
       
       if (!result.success) {
+        console.error("Validation failed:", result.error.format());
         return res.status(400).json({ message: "Invalid persona data", errors: result.error.format() });
       }
       
@@ -106,6 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(persona);
     } catch (error) {
+      console.error("Error creating persona:", error);
       res.status(500).json({ message: "Error creating persona" });
     }
   });
