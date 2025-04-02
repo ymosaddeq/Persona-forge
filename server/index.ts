@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { initializeDatabase } from "./db";
+import dotenv from "dotenv";
 
 const app = express();
 app.use(express.json());
@@ -36,7 +38,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// Load environment variables
+dotenv.config();
+
 (async () => {
+  // Initialize database
+  log("Initializing database...", "server");
+  try {
+    await initializeDatabase();
+    log("Database initialized successfully", "server");
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log("Failed to initialize database: " + errorMessage, "server");
+    // Continue application startup despite database errors
+  }
+  
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

@@ -53,7 +53,6 @@ export const insertPersonaSchema = createInsertSchema(personas).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-  userId: true,
 });
 
 export const updatePersonaSchema = createInsertSchema(personas).omit({

@@ -13,6 +13,16 @@ import {
   type Trait
 } from "@shared/schema";
 
+// Re-export types for use by storage implementations
+export type { 
+  User, InsertUser,
+  PersonaTemplate, InsertPersonaTemplate,
+  Persona, InsertPersona, UpdatePersona,
+  Conversation, InsertConversation,
+  Message, InsertMessage,
+  Trait
+};
+
 export interface IStorage {
   // User methods
   getUser(id: number): Promise<User | undefined>;
@@ -177,12 +187,25 @@ export class MemStorage implements IStorage {
   async createPersona(persona: InsertPersona): Promise<Persona> {
     const id = this.personaCurrentId++;
     const now = new Date();
+    
+    // Set default values for required fields
+    const defaults = {
+      userId: persona.userId || 1, // Default to user 1 if not provided
+      isActive: persona.isActive ?? true,
+      messagingPreference: persona.messagingPreference || 'app',
+      messageFrequency: persona.messageFrequency || 'daily',
+      whatsappEnabled: persona.whatsappEnabled ?? false,
+      whatsappNumber: persona.whatsappNumber || null
+    };
+    
     const newPersona: Persona = { 
       ...persona, 
+      ...defaults,
       id, 
       createdAt: now, 
       updatedAt: now 
     };
+    
     this.personas.set(id, newPersona);
     return newPersona;
   }
@@ -260,11 +283,21 @@ export class MemStorage implements IStorage {
   async createMessage(message: InsertMessage): Promise<Message> {
     const id = this.messageCurrentId++;
     const now = new Date();
+    
+    // Set default values for required fields
+    const defaults = {
+      isFromPersona: message.isFromPersona ?? false,
+      deliveryStatus: message.deliveryStatus || 'sent',
+      deliveredVia: message.deliveredVia || 'in-app'
+    };
+    
     const newMessage: Message = { 
       ...message, 
+      ...defaults,
       id, 
       sentAt: now 
     };
+    
     this.messages.set(id, newMessage);
     return newMessage;
   }
@@ -282,4 +315,11 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Import the PostgreSQL storage implementation
+import { PgStorage } from './pg-storage';
+
+// Export storage based on environment
+const useMemoryStorage = process.env.USE_MEMORY_STORAGE === 'true';
+
+// Export the appropriate storage implementation
+export const storage = useMemoryStorage ? new MemStorage() : new PgStorage();
