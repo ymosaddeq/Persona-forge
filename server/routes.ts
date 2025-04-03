@@ -120,20 +120,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/personas/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
+      console.log("Updating persona with data:", JSON.stringify(req.body, null, 2));
+      
+      // For partial updates, we need to get the existing persona first, then apply the changes
+      const existingPersona = await storage.getPersona(id);
+      if (!existingPersona) {
+        return res.status(404).json({ message: "Persona not found" });
+      }
+      
+      // If it's a simple isActive toggle, just update that field directly
+      if (Object.keys(req.body).length === 1 && 'isActive' in req.body) {
+        const updatedPersona = await storage.updatePersona(id, { 
+          isActive: req.body.isActive 
+        });
+        return res.json(updatedPersona);
+      }
+      
+      // Otherwise, proceed with full validation
       const result = updatePersonaSchema.safeParse(req.body);
       
       if (!result.success) {
+        console.error("Validation failed:", result.error.format());
         return res.status(400).json({ message: "Invalid persona data", errors: result.error.format() });
       }
       
       const persona = await storage.updatePersona(id, result.data);
       
-      if (!persona) {
-        return res.status(404).json({ message: "Persona not found" });
-      }
-      
       res.json(persona);
     } catch (error) {
+      console.error("Error updating persona:", error);
       res.status(500).json({ message: "Error updating persona" });
     }
   });
