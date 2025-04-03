@@ -1,6 +1,9 @@
 import OpenAI from 'openai';
 import { Persona } from '@shared/schema';
 import { storage } from './storage';
+import fs from 'fs';
+import path from 'path';
+import { promises as fsPromises } from 'fs';
 
 // Initialize OpenAI client
 const openai = new OpenAI({ 
@@ -177,6 +180,90 @@ export async function generatePersonaReply(personaId: number, userMessage: strin
   } catch (error) {
     console.error('Error generating persona reply:', error);
     return "Sorry, I'm having trouble processing that right now. Can we try again?";
+  }
+}
+
+// Create a directory for audio files if it doesn't exist
+const VOICE_FILES_DIR = path.resolve('./public/voice-messages');
+
+// Make sure the voice files directory exists
+(async () => {
+  try {
+    await fsPromises.stat(VOICE_FILES_DIR);
+  } catch (error) {
+    // Directory doesn't exist, create it
+    await fsPromises.mkdir(VOICE_FILES_DIR, { recursive: true });
+    console.log(`Created directory: ${VOICE_FILES_DIR}`);
+  }
+})();
+
+// Generate voice message using OpenAI Text-to-Speech API
+export async function generateVoiceMessage(text: string, personaId: number): Promise<{ filePath: string, duration: number } | null> {
+  try {
+    // Skip voice generation if no OpenAI API key
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy-key-for-development') {
+      console.log('Skipping voice generation due to missing API key');
+      return null;
+    }
+
+    const persona = await storage.getPersona(personaId);
+    if (!persona) throw new Error('Persona not found');
+    
+    // Choose voice based on persona traits
+    const traits = persona.traits as any;
+    let voice = 'alloy'; // default voice
+    
+    // Determine voice based on persona traits
+    if (traits.extroversion > 7) {
+      voice = 'nova'; // Energetic voice for extroverted personas
+    } else if (traits.playfulness > 7) {
+      voice = 'shimmer'; // Playful voice
+    } else if (traits.emotional < 4) {
+      voice = 'onyx'; // More serious voice for logical personas
+    } else {
+      voice = 'echo'; // Balanced voice for balanced personas
+    }
+    
+    try {
+      // Generate audio file using OpenAI TTS
+      const mp3 = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: voice,
+        input: text,
+        speed: 1.0,
+      });
+      
+      // Generate unique filename
+      const timestamp = Date.now();
+      const fileName = `persona-${personaId}-${timestamp}.mp3`;
+      const filePath = path.join(VOICE_FILES_DIR, fileName);
+      
+      // Convert to Buffer and save to file
+      const buffer = Buffer.from(await mp3.arrayBuffer());
+      await fsPromises.writeFile(filePath, buffer);
+      
+      // Estimate duration (rough estimate: ~150 characters per 10 seconds)
+      const estimatedDuration = Math.ceil(text.length / 15);
+      
+      return {
+        filePath: `/voice-messages/${fileName}`, // Public URL path
+        duration: estimatedDuration
+      };
+    } catch (apiError: any) {
+      console.error('OpenAI TTS API error:', apiError);
+      
+      // Check if it's a rate limit or quota error
+      if (apiError.status === 429 || (apiError.error?.code === 'insufficient_quota')) {
+        console.log('Skipping voice generation due to rate limiting or quota issues');
+        return null;
+      }
+      
+      // For other API errors
+      throw apiError;
+    }
+  } catch (error) {
+    console.error('Error generating voice message:', error);
+    return null;
   }
 }
 

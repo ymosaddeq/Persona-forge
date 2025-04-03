@@ -1,5 +1,7 @@
 import { Message, Persona } from "@shared/schema";
 import { format } from "date-fns";
+import VoiceMessage from "./VoiceMessage";
+import { Volume2 } from "lucide-react";
 
 interface ChatMessageProps {
   message: Message;
@@ -19,6 +21,14 @@ export default function ChatMessage({ message, persona }: ChatMessageProps) {
           </div>
           <div className="message-bubble-incoming max-w-xs md:max-w-md px-4 py-2">
             <p className="text-sm">{message.content}</p>
+            {message.hasVoice && message.voiceUrl && (
+              <div className="mt-2">
+                <VoiceMessage 
+                  audioUrl={message.voiceUrl} 
+                  duration={message.voiceDuration || 10} 
+                />
+              </div>
+            )}
           </div>
           <span className="text-xs text-gray-500">{formattedTime}</span>
         </div>

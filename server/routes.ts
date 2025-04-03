@@ -6,9 +6,9 @@ import {
   insertPersonaSchema, 
   updatePersonaSchema, 
   insertConversationSchema, 
-  insertMessageSchema 
+  insertMessageSchema
 } from "@shared/schema";
-import { generatePersonaMessage, generatePersonaReply } from "./openai";
+import { generatePersonaMessage, generatePersonaReply, generateVoiceMessage } from "./openai";
 import { sendWhatsAppMessage, checkWhatsAppAvailability } from "./greenapi";
 import nodeSchedule from 'node-schedule';
 
@@ -135,7 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: existingPersona.name,
           tagline: existingPersona.tagline,
           avatarIcon: existingPersona.avatarIcon,
-          traits: existingPersona.traits, // The traits are already in the correct Json format
+          traits: existingPersona.traits as any, // Cast to any type to resolve type mismatch
           interests: existingPersona.interests,
           isActive: Boolean(req.body.isActive), // Ensure boolean conversion
           messagingPreference: existingPersona.messagingPreference,
@@ -282,13 +282,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate AI response
       const aiReplyContent = await generatePersonaReply(personaId, result.data.content);
       
+      // Generate voice message if OpenAI API is available
+      const voiceData = await generateVoiceMessage(aiReplyContent, personaId);
+      
       // Save AI response
       const aiMessage = await storage.createMessage({
         conversationId: conversation.id,
         content: aiReplyContent,
         isFromPersona: true,
         deliveryStatus: "sent",
-        deliveredVia: "in-app"
+        deliveredVia: "in-app",
+        hasVoice: !!voiceData,
+        voiceUrl: voiceData?.filePath,
+        voiceDuration: voiceData?.duration
       });
       
       // Update conversation last message time again
@@ -385,13 +391,19 @@ function setupScheduledMessages() {
         // Generate a message from the persona
         const messageContent = await generatePersonaMessage(persona.id);
         
-        // Save the message
+        // Generate voice message if OpenAI API is available
+        const voiceData = await generateVoiceMessage(messageContent, persona.id);
+        
+        // Save the message with voice if available
         const message = await storage.createMessage({
           conversationId: conversation.id,
           content: messageContent,
           isFromPersona: true,
           deliveryStatus: "sent",
-          deliveredVia: "in-app"
+          deliveredVia: "in-app",
+          hasVoice: !!voiceData,
+          voiceUrl: voiceData?.filePath,
+          voiceDuration: voiceData?.duration
         });
         
         // Update conversation last message time

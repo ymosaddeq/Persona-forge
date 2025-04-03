@@ -87,6 +87,9 @@ export const messages = pgTable("messages", {
   sentAt: timestamp("sent_at").defaultNow().notNull(),
   deliveryStatus: text("delivery_status").default("sent").notNull(), // sent, delivered, read
   deliveredVia: text("delivered_via").default("in-app").notNull(), // in-app, whatsapp
+  hasVoice: boolean("has_voice").default(false).notNull(), // indicates if message has voice audio
+  voiceUrl: text("voice_url"), // URL to the voice message audio file
+  voiceDuration: integer("voice_duration"), // Duration of voice message in seconds
 });
 
 export const insertMessageSchema = createInsertSchema(messages).omit({
