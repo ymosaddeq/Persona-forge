@@ -33,6 +33,8 @@ export default function PersonaForm({ personaTemplates, persona, isEditing = fal
   const [interests, setInterests] = useState<string[]>(persona?.interests || []);
   const [newInterest, setNewInterest] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<PersonaTemplate | null>(null);
+  const [isVerifyingWhatsApp, setIsVerifyingWhatsApp] = useState(false);
+  const [whatsAppVerified, setWhatsAppVerified] = useState(false);
 
   // Form schema extends updatePersonaSchema with additional validation
   const formSchema = updatePersonaSchema.extend({
@@ -42,7 +44,7 @@ export default function PersonaForm({ personaTemplates, persona, isEditing = fal
     whatsappNumber: z.string().optional().refine(val => {
       if (!val) return true;
       return /^\+?[0-9]{10,15}$/.test(val);
-    }, "Must be a valid phone number")
+    }, "Must be a valid phone number with country code (e.g., +12025550145)")
   });
 
   type FormValues = z.infer<typeof formSchema>;
@@ -132,22 +134,81 @@ export default function PersonaForm({ personaTemplates, persona, isEditing = fal
     return "Balanced";
   };
 
+  // Verify WhatsApp number
+  const verifyWhatsAppNumber = async () => {
+    const phoneNumber = form.getValues("whatsappNumber");
+    
+    if (!phoneNumber) {
+      toast({
+        title: "Phone number required",
+        description: "Please enter a WhatsApp number to verify",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsVerifyingWhatsApp(true);
+    setWhatsAppVerified(false);
+    
+    try {
+      const response = await apiRequest<{ phoneNumber: string; available: boolean }>(
+        "POST", 
+        "/api/check-whatsapp", 
+        { phoneNumber }
+      );
+      
+      if (response && response.available) {
+        setWhatsAppVerified(true);
+        toast({
+          title: "WhatsApp Verified",
+          description: "The number is registered with WhatsApp"
+        });
+      } else {
+        toast({
+          title: "WhatsApp Not Available",
+          description: "This number doesn't appear to be registered with WhatsApp",
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error("Error verifying WhatsApp:", error);
+      toast({
+        title: "Verification failed",
+        description: "Could not verify WhatsApp number. Please check your internet connection.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsVerifyingWhatsApp(false);
+    }
+  };
+
   // Handle form submission
   const onSubmit = async (data: FormValues) => {
     try {
       // Make sure interests are set
       data.interests = interests;
       
+      // Check if WhatsApp is enabled but not verified
+      if (data.whatsappEnabled && data.whatsappNumber && !whatsAppVerified) {
+        const confirmContinue = window.confirm(
+          "Your WhatsApp number hasn't been verified. Do you want to continue anyway?"
+        );
+        
+        if (!confirmContinue) {
+          return;
+        }
+      }
+      
       if (isEditing && persona) {
         // Update existing persona
-        await apiRequest("PATCH", `/api/personas/${persona.id}`, data);
+        await apiRequest<Persona>("PATCH", `/api/personas/${persona.id}`, data);
         toast({
           title: "Persona updated successfully",
           description: `${data.name} has been updated.`,
         });
       } else {
         // Create new persona
-        await apiRequest("POST", "/api/personas", {
+        await apiRequest<Persona>("POST", "/api/personas", {
           ...data,
           templateId: selectedTemplate?.id || data.templateId
         });
@@ -498,15 +559,53 @@ export default function PersonaForm({ personaTemplates, persona, isEditing = fal
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>WhatsApp Number</FormLabel>
-                          <FormControl>
-                            <Input 
-                              placeholder="+1 (555) 000-0000" 
-                              {...field} 
-                              value={field.value || ""} 
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Include country code (e.g., +1 for US)
+                          <div className="flex gap-2">
+                            <FormControl>
+                              <Input 
+                                placeholder="+1 (555) 000-0000" 
+                                {...field} 
+                                value={field.value || ""} 
+                                className="flex-1"
+                                onChange={(e) => {
+                                  field.onChange(e);
+                                  setWhatsAppVerified(false);
+                                }}
+                              />
+                            </FormControl>
+                            <Button 
+                              type="button" 
+                              variant="secondary"
+                              onClick={verifyWhatsAppNumber}
+                              disabled={isVerifyingWhatsApp || !field.value}
+                              className="whitespace-nowrap"
+                            >
+                              {isVerifyingWhatsApp ? (
+                                <>
+                                  <span className="material-icons animate-spin mr-1">refresh</span>
+                                  Verifying...
+                                </>
+                              ) : whatsAppVerified ? (
+                                <>
+                                  <span className="material-icons text-green-500 mr-1">check_circle</span>
+                                  Verified
+                                </>
+                              ) : (
+                                <>
+                                  <span className="material-icons mr-1">send</span>
+                                  Verify
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          <FormDescription className="flex items-center">
+                            {whatsAppVerified ? (
+                              <span className="text-green-600 flex items-center">
+                                <span className="material-icons text-sm mr-1">check_circle</span>
+                                Number verified with WhatsApp
+                              </span>
+                            ) : (
+                              <>Include country code (e.g., +1 for US)</>
+                            )}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
