@@ -271,50 +271,103 @@ export async function generateVoiceMessage(text: string, personaId: number): Pro
 function generateFallbackResponse(persona: Persona, userMessage: string): string {
   const interests = persona.interests;
   const traits = persona.traits as any;
+  const userMessageLower = userMessage.toLowerCase();
   
-  // Basic responses based on persona interests
+  // Try to provide contextual responses based on user's message first
+  if (userMessageLower.includes("hello") || userMessageLower.includes("hi") || userMessageLower.includes("hey")) {
+    return `Hi there! Great to chat with you. I'm ${persona.name}, and I'm really into ${interests.join(", ")}. How are you doing today?`;
+  }
+  
+  if (userMessageLower.includes("how are you")) {
+    return `I'm doing great, thanks for asking! I was just thinking about ${interests[Math.floor(Math.random() * interests.length)]} actually. What about you?`;
+  }
+  
+  if (userMessageLower.includes("tell me about") || userMessageLower.includes("what do you think about")) {
+    for (const interest of interests) {
+      if (userMessageLower.includes(interest.toLowerCase())) {
+        return `I'd love to talk about ${interest}! It's one of my favorite subjects. What specific aspects of ${interest} are you interested in?`;
+      }
+    }
+  }
+  
+  // Basic responses based on persona interests with more variety
   const interestResponses: Record<string, string[]> = {
     'Technology': [
       "I've been reading about the latest tech trends. Have you tried any new gadgets recently?",
       "Technology is evolving so quickly! What tech are you most excited about these days?",
-      "I'm fascinated by AI advancements. What tech innovations do you think will have the biggest impact in the next few years?"
+      "I'm fascinated by AI advancements. What tech innovations do you think will have the biggest impact in the next few years?",
+      "I just read an article about quantum computing breakthroughs. The potential applications are mind-blowing!",
+      "Have you noticed how technology is changing how we interact with each other? I find it both fascinating and a bit concerning."
     ],
     'Gadgets': [
       "I've been thinking about upgrading my devices. Any recommendations?",
       "Did you see the latest smartphone release? The features look incredible!",
-      "I love testing new gadgets. What's your favorite tech purchase from the last year?"
+      "I love testing new gadgets. What's your favorite tech purchase from the last year?",
+      "Smart home devices have really improved lately. Have you integrated any into your living space?",
+      "Wearable tech keeps getting more advanced. Are you using any fitness trackers or smartwatches?"
     ],
     'Programming': [
       "Been working on any interesting coding projects lately?",
       "I've been diving into some new programming languages. Have you learned any new tech skills recently?",
-      "The developer community is so innovative. What programming trends are you following these days?"
+      "The developer community is so innovative. What programming trends are you following these days?",
+      "Open source projects have really changed the software landscape. Any favorites you contribute to?",
+      "What do you think about low-code platforms? Are they the future or just another tool in the toolkit?"
     ],
     'AI': [
       "AI is changing everything so rapidly. What applications of AI do you find most interesting?",
       "I've been reading about some fascinating AI research papers. Are you interested in how AI is evolving?",
-      "The possibilities with AI seem endless. What do you think about how it's being used today?"
+      "The possibilities with AI seem endless. What do you think about how it's being used today?",
+      "Generative AI models have gotten remarkably good. What creative applications have you seen that impressed you?",
+      "The intersection of AI and healthcare seems promising. Do you follow any developments in that space?"
     ],
     'Cooking': [
       "I tried a new recipe yesterday! Do you enjoy cooking?",
       "Food brings people together. What's your favorite cuisine to cook at home?",
-      "I've been experimenting in the kitchen lately. Have you discovered any new favorite recipes?"
+      "I've been experimenting in the kitchen lately. Have you discovered any new favorite recipes?",
+      "There's something so therapeutic about cooking. Do you find it relaxing too?",
+      "I'm trying to learn more sustainable cooking practices. Have you explored any eco-friendly cooking methods?"
     ],
     'Restaurants': [
       "Have you discovered any great new restaurants lately?",
       "I'm always looking for new dining spots. Any recommendations?",
-      "There's nothing like a great dining experience. What type of restaurants do you enjoy most?"
+      "There's nothing like a great dining experience. What type of restaurants do you enjoy most?",
+      "Farm-to-table restaurants have really grown in popularity. Have you been to any?",
+      "I'm fascinated by how restaurants design their menus. Have you noticed how they highlight certain dishes?"
     ],
     'Food Culture': [
       "Every culture has such fascinating food traditions. Have you explored any new cuisines recently?",
       "Food tells us so much about history and culture. What food traditions are you most interested in?",
-      "I find food documentaries so fascinating. Have you watched any good ones about food culture?"
+      "I find food documentaries so fascinating. Have you watched any good ones about food culture?",
+      "Street food is such an authentic way to experience a culture. Do you seek out street food when traveling?",
+      "The way spices are used across different cultures tells such rich stories. Any favorite spice combinations?"
     ],
     'Wine': [
       "I've been learning more about wine pairings. Do you have any favorite wines?",
       "Wine tasting is such an adventure for the senses. Have you visited any vineyards?",
-      "There's something special about finding the perfect wine for a meal. Are you interested in wine culture?"
+      "There's something special about finding the perfect wine for a meal. Are you interested in wine culture?",
+      "Natural wines are becoming more popular. Have you tried any that you enjoyed?",
+      "Each wine region has such a distinct character. Do you have a favorite wine-producing region?"
     ]
   };
+  
+  // Check for any content about user's interests in the message
+  const messageWords = userMessageLower.split(/\s+/);
+  const possibleMatches = [];
+  
+  for (const interest of interests) {
+    const interestLower = interest.toLowerCase();
+    if (messageWords.some(word => word.includes(interestLower) || interestLower.includes(word))) {
+      possibleMatches.push(interest);
+    }
+  }
+  
+  if (possibleMatches.length > 0) {
+    const matchedInterest = possibleMatches[Math.floor(Math.random() * possibleMatches.length)];
+    if (interestResponses[matchedInterest]) {
+      const responses = interestResponses[matchedInterest];
+      return responses[Math.floor(Math.random() * responses.length)];
+    }
+  }
   
   // Check if any interests match our predefined categories
   for (const interest of interests) {
@@ -332,7 +385,12 @@ function generateFallbackResponse(persona: Persona, userMessage: string): string
     "I'd love to hear more about your perspective on this topic.",
     "That's a great point! What else have you been thinking about lately?",
     "I find that fascinating. How did you become interested in this?",
-    "Thanks for sharing that with me. What other interests do you have?"
+    "Thanks for sharing that with me. What other interests do you have?",
+    "I'm curious to learn more about that. Could you elaborate?",
+    "That's a perspective I hadn't considered before. What led you to that conclusion?",
+    "I appreciate you sharing your thoughts. What else is on your mind today?",
+    "Tell me more about why you feel that way. I'm genuinely interested.",
+    "That's really thoughtful. Have you always been interested in topics like this?"
   ];
   
   const randomIndex = Math.floor(Math.random() * genericResponses.length);

@@ -11,6 +11,34 @@ import {
 import { generatePersonaMessage, generatePersonaReply, generateVoiceMessage } from "./openai";
 import { sendWhatsAppMessage, checkWhatsAppAvailability } from "./greenapi";
 import nodeSchedule from 'node-schedule';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { promisify } from 'util';
+
+// Set up multer for file uploads
+const UPLOADS_DIR = path.resolve('./public/uploads');
+// Make sure the uploads directory exists
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+const storage_multer = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: function (req, file, cb) {
+    const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `user-voice-${uniquePrefix}${path.extname(file.originalname)}`);
+  }
+});
+
+const upload = multer({ 
+  storage: storage_multer,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10 MB limit
+  }
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Create HTTP server
@@ -345,6 +373,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Error checking WhatsApp availability" });
+    }
+  });
+
+  // Upload voice message to a persona
+  app.post("/api/personas/:id/voice-messages", upload.single('audio'), async (req: Request, res: Response) => {
+    try {
+      const personaId = parseInt(req.params.id);
+      
+      // Check if file was uploaded
+      if (!req.file) {
+        return res.status(400).json({ message: "No audio file provided" });
+      }
+      
+      const persona = await storage.getPersona(personaId);
+      if (!persona) {
+        return res.status(404).json({ message: "Persona not found" });
+      }
+      
+      let conversation = await storage.getConversationByPersona(personaId);
+      if (!conversation) {
+        conversation = await storage.createConversation({
+          userId: defaultUserId,
+          personaId: personaId
+        });
+      }
+      
+      // Create a public URL for the audio file
+      const fileName = path.basename(req.file.path);
+      const audioUrl = `/uploads/${fileName}`;
+      
+      // Estimate duration (can be improved with actual audio processing)
+      const fileSizeInBytes = req.file.size;
+      const estimatedDurationInSeconds = Math.ceil(fileSizeInBytes / 16000); // Rough estimate based on typical audio bitrate
+      
+      // Save user voice message
+      const userMessage = await storage.createMessage({
+        conversationId: conversation.id,
+        content: "[Voice Message]", // Placeholder text content
+        isFromPersona: false,
+        deliveryStatus: "sent",
+        deliveredVia: "in-app",
+        hasVoice: true,
+        voiceUrl: audioUrl,
+        voiceDuration: estimatedDurationInSeconds
+      });
+      
+      // Update conversation last message time
+      await storage.updateConversationLastMessage(conversation.id);
+      
+      // Generate AI response
+      const aiReplyContent = await generatePersonaReply(personaId, "You received a voice message from me. Please respond appropriately.");
+      
+      // Generate voice message if OpenAI API is available
+      const voiceData = await generateVoiceMessage(aiReplyContent, personaId);
+      
+      // Save AI response
+      const aiMessage = await storage.createMessage({
+        conversationId: conversation.id,
+        content: aiReplyContent,
+        isFromPersona: true,
+        deliveryStatus: "sent",
+        deliveredVia: "in-app",
+        hasVoice: !!voiceData,
+        voiceUrl: voiceData?.filePath,
+        voiceDuration: voiceData?.duration
+      });
+      
+      // Update conversation last message time again
+      await storage.updateConversationLastMessage(conversation.id);
+      
+      // If WhatsApp is enabled, send message via WhatsApp too
+      if (persona.whatsappEnabled && persona.whatsappNumber) {
+        const whatsappSent = await sendWhatsAppMessage(
+          persona.whatsappNumber,
+          aiReplyContent
+        );
+        
+        if (whatsappSent) {
+          await storage.updateMessageStatus(aiMessage.id, "delivered");
+          aiMessage.deliveryStatus = "delivered";
+          aiMessage.deliveredVia = "whatsapp";
+        }
+      }
+      
+      res.status(201).json({
+        userMessage,
+        aiMessage
+      });
+    } catch (error) {
+      console.error("Error processing voice message:", error);
+      res.status(500).json({ message: "Error processing voice message" });
     }
   });
 
