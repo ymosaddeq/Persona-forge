@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
@@ -8,6 +8,14 @@ import {
   insertConversationSchema, 
   insertMessageSchema
 } from "@shared/schema";
+import { 
+  setupAuth,
+  isAuthenticated, 
+  isAdmin, 
+  checkApiLimits, 
+  incrementApiUsage, 
+  resetApiUsage 
+} from "./auth";
 import { generatePersonaMessage, generatePersonaReply, generateVoiceMessage } from "./openai";
 import { sendWhatsAppMessage, checkWhatsAppAvailability } from "./greenapi";
 import nodeSchedule from 'node-schedule';
@@ -16,7 +24,6 @@ import path from 'path';
 import fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import { promisify } from 'util';
-import { setupAuth, isAuthenticated, isAdmin, checkApiLimits } from './auth';
 
 // Set up multer for file uploads
 const UPLOADS_DIR = path.resolve('./public/uploads');

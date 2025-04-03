@@ -9,7 +9,8 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
-import { Redirect } from "wouter";
+import { Redirect, useLocation } from "wouter";
+import { useEffect, useState } from "react";
 
 const loginSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -31,6 +32,17 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
+  const [location] = useLocation();
+  const [activeTab, setActiveTab] = useState("login");
+  
+  // Parse query params to detect if we should show register tab
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.split("?")[1]);
+    const tab = searchParams.get("tab");
+    if (tab === "register") {
+      setActiveTab("register");
+    }
+  }, [location]);
 
   // Redirect if user is already logged in
   if (user) {
@@ -199,7 +211,7 @@ export default function AuthPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Register</TabsTrigger>
