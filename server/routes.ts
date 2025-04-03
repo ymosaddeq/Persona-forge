@@ -236,7 +236,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         persona
       });
     } catch (error) {
-      res.status(500).json({ message: "Error fetching conversation" });
+      console.error("Error fetching conversation:", error);
+      res.status(500).json({ message: "Error fetching conversation", error: error instanceof Error ? error.message : String(error) });
     }
   });
   

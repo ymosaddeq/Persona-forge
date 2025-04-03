@@ -6,11 +6,9 @@ export default function MobileNav() {
   return (
     <nav className="md:hidden bg-white border-t border-gray-200">
       <div className="flex justify-around">
-        <Link href="/">
-          <a className={`flex flex-col items-center py-2 px-3 ${location === '/' ? 'text-primary' : 'text-gray-500'}`}>
-            <span className="material-icons">people</span>
-            <span className="text-xs mt-1">Personas</span>
-          </a>
+        <Link href="/" className={`flex flex-col items-center py-2 px-3 ${location === '/' ? 'text-primary' : 'text-gray-500'}`}>
+          <span className="material-icons">people</span>
+          <span className="text-xs mt-1">Personas</span>
         </Link>
         <a href="#" className="flex flex-col items-center py-2 px-3 text-gray-500">
           <span className="material-icons">chat</span>
