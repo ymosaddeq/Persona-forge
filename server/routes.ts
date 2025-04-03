@@ -130,9 +130,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If it's a simple isActive toggle, just update that field directly
       if (Object.keys(req.body).length === 1 && 'isActive' in req.body) {
-        const updatedPersona = await storage.updatePersona(id, { 
-          isActive: req.body.isActive 
-        });
+        // Create an update object that maintains all required fields from the existing persona
+        const updateData = {
+          name: existingPersona.name,
+          tagline: existingPersona.tagline,
+          avatarIcon: existingPersona.avatarIcon,
+          traits: existingPersona.traits, // The traits are already in the correct Json format
+          interests: existingPersona.interests,
+          isActive: Boolean(req.body.isActive), // Ensure boolean conversion
+          messagingPreference: existingPersona.messagingPreference,
+          messageFrequency: existingPersona.messageFrequency,
+          whatsappEnabled: existingPersona.whatsappEnabled,
+          whatsappNumber: existingPersona.whatsappNumber
+        };
+        
+        const updatedPersona = await storage.updatePersona(id, updateData);
         return res.json(updatedPersona);
       }
       
