@@ -53,6 +53,7 @@ export interface IStorage {
   getMessage(id: number): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessageStatus(id: number, status: string): Promise<Message | undefined>;
+  updateMessageVoice(id: number, hasVoice: boolean, voiceUrl: string | null, voiceDuration: number | null): Promise<Message | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -288,7 +289,10 @@ export class MemStorage implements IStorage {
     const defaults = {
       isFromPersona: message.isFromPersona ?? false,
       deliveryStatus: message.deliveryStatus || 'sent',
-      deliveredVia: message.deliveredVia || 'in-app'
+      deliveredVia: message.deliveredVia || 'in-app',
+      hasVoice: message.hasVoice ?? false,
+      voiceUrl: message.voiceUrl ?? null,
+      voiceDuration: message.voiceDuration ?? null
     };
     
     const newMessage: Message = { 
@@ -309,6 +313,20 @@ export class MemStorage implements IStorage {
     const updatedMessage: Message = { 
       ...message, 
       deliveryStatus: status 
+    };
+    this.messages.set(id, updatedMessage);
+    return updatedMessage;
+  }
+
+  async updateMessageVoice(id: number, hasVoice: boolean, voiceUrl: string | null, voiceDuration: number | null): Promise<Message | undefined> {
+    const message = this.messages.get(id);
+    if (!message) return undefined;
+
+    const updatedMessage: Message = {
+      ...message,
+      hasVoice,
+      voiceUrl,
+      voiceDuration
     };
     this.messages.set(id, updatedMessage);
     return updatedMessage;

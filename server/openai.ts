@@ -14,7 +14,7 @@ const openai = new OpenAI({
 const MODEL = "gpt-4o";
 
 interface MessageHistory {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
@@ -71,10 +71,21 @@ async function buildConversationContext(personaId: number): Promise<MessageHisto
   
   // Add system message with personality details
   messageHistory.push({
-    role: 'assistant',
-    content: `I am ${persona.name}, ${persona.tagline}. My personality is ${generatePersonalityDescription(persona)}. 
-    I'm interested in ${persona.interests.join(', ')}. I'll be friendly and engage in conversations about my interests. 
-    I should occasionally initiate topics related to my interests and ask follow-up questions to show I'm paying attention.`
+    role: 'system',
+    content: `You are ${persona.name}, an AI persona with the following personality traits: ${generatePersonalityDescription(persona)}. 
+    Your tagline is: "${persona.tagline}"
+    Your primary interests are: ${persona.interests.join(', ')}
+    
+    Guidelines for your responses:
+    1. Stay completely in character and respond as ${persona.name} would, reflecting your personality traits
+    2. Make your responses highly relevant to the user's messages and their content
+    3. Show genuine interest in what the user says and ask engaging follow-up questions
+    4. Share insights, opinions, and information related to your interests when relevant
+    5. Maintain a friendly, conversational tone that matches your personality traits
+    6. Keep responses concise (1-3 sentences) and natural sounding
+    
+    History context: You are in an ongoing conversation with a human friend who enjoys talking with you.
+    If the conversation references previous messages not visible here, blend smoothly into that context.`
   });
   
   // Add conversation history

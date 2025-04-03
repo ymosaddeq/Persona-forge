@@ -186,4 +186,18 @@ export class PgStorage implements IStorage {
     
     return result[0];
   }
+
+  async updateMessageVoice(id: number, hasVoice: boolean, voiceUrl: string | null, voiceDuration: number | null): Promise<Message | undefined> {
+    const result = await db
+      .update(messages)
+      .set({
+        hasVoice,
+        voiceUrl,
+        voiceDuration
+      })
+      .where(eq(messages.id, id))
+      .returning();
+    
+    return result[0];
+  }
 }

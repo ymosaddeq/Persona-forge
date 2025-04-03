@@ -22,18 +22,30 @@
   }
   
   .voice-player {
-    @apply flex flex-col gap-1 bg-background/50 rounded-md p-2;
+    @apply flex flex-col gap-1 backdrop-blur-sm transition-all duration-200;
+    min-width: 200px;
   }
   
-  .voice-player-progress {
-    @apply h-1.5 bg-primary-foreground/20 rounded-full overflow-hidden;
-  }
-  
-  .voice-player-progress-bar {
-    @apply h-full bg-primary rounded-full transition-all duration-100;
+  .voice-player:hover {
+    @apply shadow-lg;
   }
   
   .voice-player-controls {
     @apply flex items-center gap-2;
+  }
+  
+  /* Playback animations */
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+  
+  .voice-player .voice-player-controls button[disabled] {
+    @apply opacity-40 cursor-not-allowed;
+  }
+  
+  .voice-player .voice-player-controls button:not([disabled]):active {
+    animation: pulse 0.2s ease-in-out;
   }
 }

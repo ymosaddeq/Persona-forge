@@ -1,22 +1,28 @@
-import React, { useState, useRef } from 'react';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Play, Pause, Volume2, VolumeX, Trash2, RefreshCw, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 interface VoiceMessageProps {
   audioUrl: string;
   duration: number;
   className?: string;
+  onDelete?: () => void;
+  isUserMessage?: boolean;
 }
 
-export function VoiceMessage({ audioUrl, duration, className }: VoiceMessageProps) {
+export function VoiceMessage({ audioUrl, duration, className, onDelete, isUserMessage = false }: VoiceMessageProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0.8);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [showControls, setShowControls] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { toast } = useToast();
 
   // Format time as MM:SS
   const formatTime = (timeInSeconds: number) => {
@@ -87,8 +93,59 @@ export function VoiceMessage({ audioUrl, duration, className }: VoiceMessageProp
     setCurrentTime(0);
   };
 
+  // Handle audio load
+  useEffect(() => {
+    if (audioRef.current) {
+      const handleLoadedMetadata = () => {
+        setIsLoaded(true);
+      };
+      
+      audioRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
+      
+      return () => {
+        if (audioRef.current) {
+          audioRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        }
+      };
+    }
+  }, [audioRef.current]);
+
+  // Handle audio restart
+  const handleRestart = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  // Handle delete
+  const handleDelete = () => {
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause();
+    }
+    
+    if (onDelete) {
+      onDelete();
+      toast({
+        title: "Voice message deleted",
+        description: "The voice message has been removed from the conversation.",
+        variant: "default",
+      });
+    }
+  };
+
   return (
-    <div className={cn('voice-player', className)}>
+    <div 
+      className={cn(
+        'voice-player rounded-lg p-2 transition-all duration-200',
+        isUserMessage ? 'bg-primary/10' : 'bg-secondary/50',
+        showControls ? 'shadow-md' : '',
+        className
+      )}
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
       {/* Audio element (hidden) */}
       <audio 
         ref={audioRef}
@@ -98,53 +155,89 @@ export function VoiceMessage({ audioUrl, duration, className }: VoiceMessageProp
         preload="metadata"
       />
       
-      {/* Play/Pause and time progress */}
-      <div className="voice-player-controls">
+      {/* Main controls row */}
+      <div className="voice-player-controls flex items-center gap-2 mb-1">
         <Button 
           variant="ghost" 
           size="sm" 
-          className="h-8 w-8 p-0" 
+          className={cn(
+            "h-8 w-8 rounded-full p-0 flex items-center justify-center",
+            isPlaying ? "bg-primary text-primary-foreground hover:bg-primary/90" : "hover:bg-secondary"
+          )}
           onClick={togglePlay}
+          disabled={!isLoaded}
         >
           {isPlaying ? <Pause size={16} /> : <Play size={16} />}
         </Button>
         
-        <div className="flex-1">
-          <div className="voice-player-progress">
-            <div 
-              className="voice-player-progress-bar" 
-              style={{ width: `${progress}%` }} 
-            />
+        <div className="flex-1 flex items-center gap-2">
+          <Slider 
+            value={[progress]} 
+            min={0} 
+            max={100} 
+            step={1}
+            onValueChange={handleProgressChange}
+            className="cursor-pointer"
+            disabled={!isLoaded}
+          />
+          
+          <div className="text-xs text-muted-foreground whitespace-nowrap">
+            {formatTime(currentTime)}/{formatTime(audioRef.current?.duration || duration)}
           </div>
         </div>
         
-        <div className="text-xs text-muted-foreground min-w-[48px] text-right">
-          {formatTime(currentTime)}/{formatTime(audioRef.current?.duration || duration)}
-        </div>
+        {/* Show restart and delete buttons when controls are visible */}
+        {showControls && (
+          <div className="flex gap-1">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-7 w-7 p-0 rounded-full opacity-70 hover:opacity-100" 
+              onClick={handleRestart}
+              title="Restart"
+            >
+              <RotateCcw size={14} />
+            </Button>
+            
+            {onDelete && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 w-7 p-0 rounded-full text-destructive opacity-70 hover:opacity-100 hover:bg-destructive/10" 
+                onClick={handleDelete}
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       
-      {/* Volume control */}
-      <div className="voice-player-controls">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="h-8 w-8 p-0" 
-          onClick={toggleMute}
-        >
-          {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-        </Button>
-        
-        <div className="w-24">
-          <Slider 
-            value={[isMuted ? 0 : volume]} 
-            min={0} 
-            max={1} 
-            step={0.01}
-            onValueChange={handleVolumeChange}
-            className="cursor-pointer"
-          />
+      {/* Volume control - only visible when showControls is true */}
+      {showControls && (
+        <div className="voice-player-controls flex items-center gap-2 mt-1 px-1">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-6 w-6 p-0 rounded-full" 
+            onClick={toggleMute}
+          >
+            {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          </Button>
+          
+          <div className="flex-1">
+            <Slider 
+              value={[isMuted ? 0 : volume]} 
+              min={0} 
+              max={1} 
+              step={0.01}
+              onValueChange={handleVolumeChange}
+              className="cursor-pointer"
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import nodeSchedule from 'node-schedule';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import { promisify } from 'util';
 
 // Set up multer for file uploads
@@ -464,6 +465,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing voice message:", error);
       res.status(500).json({ message: "Error processing voice message" });
+    }
+  });
+
+  // Delete voice from a message
+  app.delete("/api/messages/:id/voice", async (req: Request, res: Response) => {
+    try {
+      const messageId = parseInt(req.params.id);
+      const message = await storage.getMessage(messageId);
+      
+      if (!message) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+      
+      if (!message.hasVoice) {
+        return res.status(400).json({ message: "Message does not have voice" });
+      }
+      
+      // Get voice file path from URL
+      if (message.voiceUrl) {
+        try {
+          const voiceFilename = message.voiceUrl.split('/').pop();
+          if (voiceFilename) {
+            const voiceFilePath = path.join('./public/voice-messages', voiceFilename);
+            
+            // Check if file exists before attempting to delete
+            try {
+              await fsPromises.access(voiceFilePath);
+              // Delete the voice file
+              await fsPromises.unlink(voiceFilePath);
+              console.log(`Deleted voice file: ${voiceFilePath}`);
+            } catch (fileError) {
+              console.log(`Voice file not found or could not be deleted: ${voiceFilePath}`);
+              // Continue even if file doesn't exist
+            }
+          }
+        } catch (fileError) {
+          console.error("Error deleting voice file:", fileError);
+          // Continue without failing the request
+        }
+      }
+      
+      // Update message to remove voice
+      const updatedMessage = await storage.updateMessageVoice(
+        messageId, 
+        false, // hasVoice
+        null,  // voiceUrl
+        null   // voiceDuration
+      );
+      
+      res.json(updatedMessage);
+    } catch (error) {
+      console.error("Error deleting voice message:", error);
+      res.status(500).json({ message: "Failed to delete voice message" });
     }
   });
 
