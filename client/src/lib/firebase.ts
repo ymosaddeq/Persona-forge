@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { getApps } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider, 
@@ -58,6 +59,7 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com`,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  redirectUri: window.location.origin + "/auth", // Explicitly set the redirect URI
 };
 
 // Log the configuration (without sensitive parts)
@@ -67,18 +69,45 @@ console.log("Firebase configuration:", {
   storageBucket: firebaseConfig.storageBucket
 });
 
-// Initialize Firebase only if it hasn't been initialized yet
-let app: ReturnType<typeof initializeApp>;
+// Initialize Firebase carefully to handle HMR in development
+let app;
 let auth: ReturnType<typeof getAuth> | null = null;
 
 try {
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  // Set persistence to LOCAL to remember the user between sessions
-  setPersistence(auth, browserLocalPersistence)
-    .catch(error => console.error("Error setting persistence:", error));
+  // This is a more reliable way to initialize Firebase that works with Hot Module Replacement
+  try {
+    app = initializeApp(firebaseConfig);
+    console.log("Firebase app initialized");
+  } catch (initError: any) {
+    // If the error is about a duplicate app, use the existing one
+    if (initError.code === 'app/duplicate-app') {
+      console.log("Firebase app already exists, using existing app");
+      // Get the existing default app
+      const apps = getApps();
+      if (apps.length > 0) {
+        app = apps[0];
+      }
+    } else {
+      // If it's another type of error, rethrow it
+      console.error("Firebase initialization error:", initError);
+      throw initError;
+    }
+  }
+  
+  // Get the auth instance from the app
+  if (app) {
+    auth = getAuth(app);
+    console.log("Firebase auth initialized");
+    
+    // Set persistence to LOCAL to remember the user between sessions
+    setPersistence(auth, browserLocalPersistence)
+      .then(() => console.log("Firebase persistence set to LOCAL"))
+      .catch(error => console.error("Error setting persistence:", error));
+  } else {
+    console.error("Failed to initialize Firebase app");
+  }
 } catch (error) {
-  console.error("Firebase initialization error:", error);
+  console.error("Fatal Firebase initialization error:", error);
 }
 
 export { auth };
@@ -100,6 +129,22 @@ export async function signInWithGoogle() {
     console.log("Starting Google login flow...");
     console.log("Firebase project ID:", import.meta.env.VITE_FIREBASE_PROJECT_ID);
     console.log("Auth domain used:", authDomain);
+    console.log("Firebase URL:", window.location.origin + "/auth");
+    
+    // Make sure we have a valid configuration
+    if (!import.meta.env.VITE_FIREBASE_API_KEY) {
+      throw new Error("Missing Firebase API key in environment variables");
+    }
+    
+    if (!import.meta.env.VITE_FIREBASE_PROJECT_ID) {
+      throw new Error("Missing Firebase project ID in environment variables");
+    }
+    
+    // Add a custom parameter to specify the exact redirect URI
+    googleProvider.setCustomParameters({
+      prompt: 'select_account',
+      redirect_uri: window.location.origin + "/auth" 
+    });
     
     // Start the redirect flow - this will navigate away from the page
     await signInWithRedirect(auth, googleProvider);

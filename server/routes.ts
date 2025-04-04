@@ -68,11 +68,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication with Passport
   setupAuth(app);
   
-  // Handle Firebase Auth redirect
-  app.get("/__/auth/handler", (req, res) => {
-    console.log("Firebase Auth redirect handler called");
-    // Redirect to the auth page
-    res.redirect('/auth');
+  // Handle Firebase Auth redirects - add multiple potential paths
+  const firebaseRedirectPaths = ["/__/auth/handler", "/auth/handler", "/.well-known/firebase"];
+  
+  firebaseRedirectPaths.forEach(path => {
+    app.get(path, (req, res) => {
+      console.log(`Firebase Auth redirect handler called for path: ${path}`);
+      // Redirect to the auth page
+      res.redirect('/auth');
+    });
   });
   
   // Add Google authentication endpoint
