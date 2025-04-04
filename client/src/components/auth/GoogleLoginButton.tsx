@@ -4,11 +4,7 @@ import { SiGoogle } from "react-icons/si";
 import { Loader2 } from "lucide-react";
 
 export function GoogleLoginButton({ className }: { className?: string }) {
-  const { googleLoginMutation } = useAuth();
-  
-  const handleGoogleLogin = () => {
-    googleLoginMutation.mutate();
-  };
+  const { googleLoginMutation, handleGoogleLogin } = useAuth();
   
   return (
     <Button 

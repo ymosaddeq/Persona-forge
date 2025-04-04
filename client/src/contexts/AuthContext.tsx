@@ -40,13 +40,18 @@ interface AuthContextType {
   loginMutation: UseMutationResult<User, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<User, Error, RegisterData>;
-  googleLoginMutation: UseMutationResult<any, Error, void>; // Using 'any' for the return type
+  googleLoginMutation: UseMutationResult<any, Error, void>;
+  handleGoogleLogin: () => void;
 }
 
-export const AuthContext = createContext<AuthContextType | null>(null);
+// Create auth context
+const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+// Auth provider component
+function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  
+  // Fetch the current user
   const {
     data: user,
     error,
@@ -56,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
+  // Login mutation
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
       const res = await apiRequest("POST", "/api/login", credentials);
@@ -77,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Register mutation
   const registerMutation = useMutation({
     mutationFn: async (credentials: RegisterData) => {
       const res = await apiRequest("POST", "/api/register", credentials);
@@ -98,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Logout mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
       // Sign out from both Firebase and session
@@ -123,13 +131,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  // For Google login, we use a different approach since it uses redirects
-  // This mutation only starts the redirect flow, we don't get a return value
+  // Google login mutation
   const googleLoginMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       try {
         await signInWithGoogle();
-        // No return value - the function above redirects away from the page
       } catch (error) {
         console.error("Google login error:", error);
         throw new Error(error instanceof Error ? error.message : "Google login failed");
@@ -142,29 +148,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         variant: "destructive",
       });
     }
-  } as any); // Using 'as any' to bypass the type checking issue
+  });
+
+  // Handler for Google login
+  const handleGoogleLogin = () => {
+    googleLoginMutation.mutate();
+  };
+
+  // Create context value
+  const contextValue = {
+    user: user ?? null,
+    isLoading,
+    error,
+    loginMutation,
+    logoutMutation,
+    registerMutation,
+    googleLoginMutation,
+    handleGoogleLogin
+  };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user: user ?? null,
-        isLoading,
-        error,
-        loginMutation,
-        logoutMutation,
-        registerMutation,
-        googleLoginMutation,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
+// Custom hook for using auth context
+function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
+
+export { AuthProvider, useAuth };
