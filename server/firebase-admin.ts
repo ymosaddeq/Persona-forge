@@ -21,10 +21,20 @@ export const auth = getAuth(firebaseApp);
 // Function to verify Firebase ID token
 export async function verifyFirebaseToken(idToken: string) {
   try {
+    console.log("Verifying Firebase token...");
     const decodedToken = await auth.verifyIdToken(idToken);
+    console.log("Token verified successfully for user:", decodedToken.email);
     return decodedToken;
   } catch (error) {
     console.error('Error verifying Firebase token:', error);
+    // Log more details about the error
+    if (error instanceof Error) {
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      if ('code' in error) {
+        console.error("Error code:", (error as any).code);
+      }
+    }
     return null;
   }
 }

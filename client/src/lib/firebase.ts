@@ -2,8 +2,8 @@ import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   GoogleAuthProvider, 
-  signInWithPopup, 
   signInWithRedirect, 
+  getRedirectResult,
   signOut, 
   User as FirebaseUser 
 } from "firebase/auth";
@@ -23,14 +23,43 @@ export const auth = getAuth(app);
 
 // Google provider for authentication
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
-// Sign in with Google using popup
+// Sign in with Google using redirect (better for Replit environment)
 export async function signInWithGoogle() {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
+    // Log the Firebase config being used (without sensitive values)
+    console.log("Firebase project ID:", import.meta.env.VITE_FIREBASE_PROJECT_ID);
+    console.log("Auth domain:", `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`);
+    
+    // Start the redirect flow - this will navigate away from the page
+    await signInWithRedirect(auth, googleProvider);
+    // The function won't continue past this point until the user is redirected back
+  } catch (error) {
+    console.error("Google login error:", error);
+    throw error;
+  }
+}
+
+// Handle the redirect result when the user comes back
+export async function handleRedirectResult() {
+  try {
+    console.log("Checking for redirect result...");
+    const result = await getRedirectResult(auth);
+    
+    if (!result) {
+      console.log("No redirect result found");
+      return null; // No redirect result
+    }
+    
+    console.log("Redirect result found, user authenticated with Firebase");
     const user = result.user;
+    console.log("Getting ID token for user:", user.email);
     const idToken = await user.getIdToken();
     
+    console.log("Sending token to backend for verification");
     // Send token to backend for verification and login
     const response = await fetch('/api/auth/google', {
       method: 'POST',
@@ -42,12 +71,16 @@ export async function signInWithGoogle() {
     });
     
     if (!response.ok) {
-      throw new Error('Failed to authenticate with server');
+      const errorText = await response.text();
+      console.error("Server authentication failed:", response.status, errorText);
+      throw new Error(`Failed to authenticate with server: ${response.status} ${errorText}`);
     }
     
-    return await response.json();
+    const userData = await response.json();
+    console.log("Server authentication successful");
+    return userData;
   } catch (error) {
-    console.error("Error signing in with Google:", error);
+    console.error("Error handling redirect result:", error);
     throw error;
   }
 }

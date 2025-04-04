@@ -13,6 +13,8 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import MobileNav from "@/components/layout/MobileNav";
+import { useEffect } from "react";
+import { handleRedirectResult } from "./lib/firebase";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -78,6 +80,22 @@ function Router() {
 }
 
 function App() {
+  // Handle Firebase authentication redirect on app load
+  useEffect(() => {
+    // This will process any pending Firebase redirect sign-in
+    handleRedirectResult()
+      .then((user) => {
+        if (user) {
+          // Successfully signed in and received user data from server
+          console.log("User signed in after redirect:", user);
+          queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+        }
+      })
+      .catch((error) => {
+        console.error("Error handling redirect:", error);
+      });
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

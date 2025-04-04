@@ -10,6 +10,7 @@ import { eq, sql, or } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import pg from "pg";
 import { verifyFirebaseToken } from './firebase-admin';
+import { storage } from './storage';
 
 // Create a connection pool for sessions
 const pool = new pg.Pool({
@@ -261,29 +262,17 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "Email is required" });
       }
       
-      // Check if user exists with this Google ID
-      let [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.googleId, uid));
+      // Try to find user by Google ID
+      let user = await storage.getUserByGoogleId(uid);
       
       // If not found by Google ID, check by email
       if (!user) {
-        [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.email, email));
+        // Find user by email
+        const userByEmail = await storage.getUserByEmail(email);
         
-        // If found by email but not linked to Google yet, update the Google ID
-        if (user) {
-          [user] = await db
-            .update(users)
-            .set({ 
-              googleId: uid,
-              profilePicture: picture || user.profilePicture
-            })
-            .where(eq(users.id, user.id))
-            .returning();
+        if (userByEmail) {
+          // Update user with Google ID
+          user = await storage.updateUserGoogleId(userByEmail.id, uid, picture);
         }
       }
       
@@ -292,36 +281,24 @@ export function setupAuth(app: Express) {
         // Generate a username from email if not provided
         const username = name || email.split('@')[0];
         
-        // Check if username exists
+        // Check if username exists and make it unique if needed
         let uniqueUsername = username;
         let counter = 1;
         
-        while (true) {
-          const [existingUser] = await db
-            .select()
-            .from(users)
-            .where(eq(users.username, uniqueUsername));
-          
-          if (!existingUser) break;
-          
+        while (await storage.getUserByUsername(uniqueUsername)) {
           // If username exists, append a number and try again
           uniqueUsername = `${username}${counter++}`;
         }
         
         // Create new user with Google info
-        [user] = await db
-          .insert(users)
-          .values({
-            username: uniqueUsername,
-            email,
-            googleId: uid,
-            password: null, // No password for Google auth
-            profilePicture: picture || null,
-            role: "user",
-            apiUsage: 0,
-            usageLimit: 100
-          })
-          .returning();
+        user = await storage.createUser({
+          username: uniqueUsername,
+          email,
+          googleId: uid,
+          password: "", // Empty string for Google auth
+          profilePicture: picture || null,
+          role: "user"
+        });
       }
       
       // Log the user in

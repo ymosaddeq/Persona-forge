@@ -4,19 +4,40 @@ import {
   PersonaTemplate, InsertPersonaTemplate,
   Persona, InsertPersona, UpdatePersona,
   Conversation, InsertConversation,
-  Message, InsertMessage
+  Message, InsertMessage,
+  PhoneNumber, InsertPhoneNumber
 } from '@shared/schema';
 import { db } from './db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { 
   users, 
   personaTemplates, 
   personas, 
   conversations, 
-  messages 
+  messages,
+  phoneNumberPool
 } from '@shared/schema';
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+import pg from "pg";
 
 export class PgStorage implements IStorage {
+  public sessionStore: session.Store;
+  
+  constructor() {
+    // Create a connection pool for sessions
+    const pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+    });
+    
+    const PostgresSessionStore = connectPg(session);
+    
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      tableName: 'session',
+      createTableIfMissing: true
+    });
+  }
   // User methods
   async getUser(id: number): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id));
@@ -26,6 +47,164 @@ export class PgStorage implements IStorage {
   async getUserByUsername(username: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.username, username));
     return result[0];
+  }
+  
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.email, email));
+    return result[0];
+  }
+  
+  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.googleId, googleId));
+    return result[0];
+  }
+  
+  async updateUserGoogleId(userId: number, googleId: string, profilePicture?: string | null): Promise<User | undefined> {
+    const result = await db
+      .update(users)
+      .set({ 
+        googleId, 
+        profilePicture: profilePicture || undefined,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return result[0];
+  }
+  
+  async updateUserApiUsage(userId: number, increment: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) return undefined;
+    
+    const result = await db
+      .update(users)
+      .set({ 
+        apiUsage: user.apiUsage + increment,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return result[0];
+  }
+  
+  async resetAllUsersApiUsage(): Promise<void> {
+    await db
+      .update(users)
+      .set({ 
+        apiUsage: 0,
+        updatedAt: new Date()
+      });
+  }
+  
+  // Phone Number Pool methods
+  async getPhoneNumbers(userId: number): Promise<PhoneNumber[]> {
+    return await db
+      .select()
+      .from(phoneNumberPool)
+      .where(eq(phoneNumberPool.userId, userId));
+  }
+  
+  async getPhoneNumber(id: number): Promise<PhoneNumber | undefined> {
+    const result = await db
+      .select()
+      .from(phoneNumberPool)
+      .where(eq(phoneNumberPool.id, id));
+      
+    return result[0];
+  }
+  
+  async createPhoneNumber(phoneNumber: InsertPhoneNumber): Promise<PhoneNumber> {
+    const result = await db
+      .insert(phoneNumberPool)
+      .values({
+        ...phoneNumber,
+        isVerified: false,
+        assignedToPersonaId: null
+      })
+      .returning();
+      
+    return result[0];
+  }
+  
+  async verifyPhoneNumber(id: number): Promise<PhoneNumber | undefined> {
+    const result = await db
+      .update(phoneNumberPool)
+      .set({ 
+        isVerified: true,
+        updatedAt: new Date()
+      })
+      .where(eq(phoneNumberPool.id, id))
+      .returning();
+      
+    return result[0];
+  }
+  
+  async assignPhoneNumberToPersona(id: number, personaId: number | null): Promise<PhoneNumber | undefined> {
+    // First check if this number was previously assigned to another persona
+    const phoneNumber = await this.getPhoneNumber(id);
+    if (!phoneNumber) return undefined;
+    
+    // If this number was previously assigned to another persona, clear that assignment
+    if (phoneNumber.assignedToPersonaId && personaId !== phoneNumber.assignedToPersonaId) {
+      await db
+        .update(personas)
+        .set({
+          whatsappEnabled: false,
+          whatsappNumber: null,
+          updatedAt: new Date()
+        })
+        .where(eq(personas.id, phoneNumber.assignedToPersonaId));
+    }
+    
+    // Update phone number with new assignment
+    const updatedPhoneNumber = await db
+      .update(phoneNumberPool)
+      .set({
+        assignedToPersonaId: personaId,
+        updatedAt: new Date()
+      })
+      .where(eq(phoneNumberPool.id, id))
+      .returning();
+    
+    // If assigning to a persona, update the persona's WhatsApp settings
+    if (personaId) {
+      await db
+        .update(personas)
+        .set({
+          whatsappEnabled: true,
+          whatsappNumber: phoneNumber.phoneNumber,
+          updatedAt: new Date()
+        })
+        .where(eq(personas.id, personaId));
+    }
+    
+    return updatedPhoneNumber[0];
+  }
+  
+  async deletePhoneNumber(id: number): Promise<boolean> {
+    // Check if the phone number is assigned to a persona
+    const phoneNumber = await this.getPhoneNumber(id);
+    if (!phoneNumber) return false;
+    
+    // If the phone number was assigned to a persona, update the persona
+    if (phoneNumber.assignedToPersonaId) {
+      await db
+        .update(personas)
+        .set({
+          whatsappEnabled: false,
+          whatsappNumber: null,
+          updatedAt: new Date()
+        })
+        .where(eq(personas.id, phoneNumber.assignedToPersonaId));
+    }
+    
+    // Delete the phone number
+    const result = await db
+      .delete(phoneNumberPool)
+      .where(eq(phoneNumberPool.id, id))
+      .returning({ id: phoneNumberPool.id });
+      
+    return result.length > 0;
   }
 
   async createUser(user: InsertUser): Promise<User> {
@@ -92,6 +271,15 @@ export class PgStorage implements IStorage {
   async deletePersona(id: number): Promise<boolean> {
     const result = await db.delete(personas).where(eq(personas.id, id)).returning({ id: personas.id });
     return result.length > 0;
+  }
+  
+  async countPersonasByUser(userId: number): Promise<number> {
+    const result = await db
+      .select({ count: sql`count(*)` })
+      .from(personas)
+      .where(eq(personas.userId, userId));
+    
+    return Number(result[0].count);
   }
 
   // Conversation methods

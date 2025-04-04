@@ -37,9 +37,11 @@ export interface IStorage {
   // User methods
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserApiUsage(userId: number, increment: number): Promise<User | undefined>;
+  updateUserGoogleId(userId: number, googleId: string, profilePicture?: string | null): Promise<User | undefined>;
   resetAllUsersApiUsage(): Promise<void>;
   
   // Phone Number Pool methods
@@ -187,6 +189,27 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values()).find(
       (user) => user.googleId === googleId,
     );
+  }
+  
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.email === email,
+    );
+  }
+  
+  async updateUserGoogleId(userId: number, googleId: string, profilePicture?: string | null): Promise<User | undefined> {
+    const user = this.users.get(userId);
+    if (!user) return undefined;
+    
+    const updatedUser: User = {
+      ...user,
+      googleId,
+      profilePicture: profilePicture || user.profilePicture,
+      updatedAt: new Date()
+    };
+    
+    this.users.set(userId, updatedUser);
+    return updatedUser;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {

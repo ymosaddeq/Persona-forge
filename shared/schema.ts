@@ -7,7 +7,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
-  password: text("password"),  // Null for Google auth users
+  password: text("password").default(""),  // Empty string for Google auth users
   googleId: text("google_id").unique(),  // For Google authentication
   profilePicture: text("profile_picture"),  // Profile picture URL
   role: text("role").notNull().default("user"),
@@ -22,11 +22,11 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
   updatedAt: true,
   apiUsage: true,
-  googleId: true,
-  profilePicture: true,
 }).extend({
   email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters").or(z.literal("")),
+  googleId: z.string().optional(),
+  profilePicture: z.string().nullable().optional(),
 });
 
 // Phone number pool for validated WhatsApp numbers
