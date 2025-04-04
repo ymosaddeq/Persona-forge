@@ -67,6 +67,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Setup authentication with Passport
   setupAuth(app);
+  
+  // Handle Firebase Auth redirect
+  app.get("/__/auth/handler", (req, res) => {
+    console.log("Firebase Auth redirect handler called");
+    // Redirect to the auth page
+    res.redirect('/auth');
+  });
+  
+  // Add Google authentication endpoint
+  app.post("/api/auth/google", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ message: "No token provided" });
+      }
+      
+      // Import verifyFirebaseToken from firebase-admin.ts
+      const { verifyFirebaseToken } = await import("./firebase-admin");
+      
+      // Verify the token with Firebase
+      const decodedToken = await verifyFirebaseToken(token);
+      
+      if (!decodedToken) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+      
+      // Get or create user by Google ID
+      const googleId = decodedToken.uid;
+      const email = decodedToken.email || '';
+      const name = decodedToken.name || email.split('@')[0] || 'Google User';
+      const picture = decodedToken.picture || null;
+      
+      // Check if user exists by Google ID
+      let user = await storage.getUserByGoogleId(googleId);
+      
+      if (!user) {
+        // Check if user exists by email
+        const existingUserByEmail = await storage.getUserByEmail(email);
+        
+        if (existingUserByEmail) {
+          // Update existing user with Google ID
+          user = await storage.updateUserGoogleId(existingUserByEmail.id, googleId, picture);
+          if (!user) {
+            return res.status(500).json({ message: "Failed to update user with Google ID" });
+          }
+        } else {
+          // Create new user
+          user = await storage.createUser({
+            username: name,
+            email: email,
+            password: "", // Empty string for Google auth users
+            googleId: googleId,
+            profilePicture: picture
+          });
+        }
+      }
+      
+      // Login the user
+      req.login(user, (err: any) => {
+        if (err) {
+          console.error("Error logging in user:", err);
+          return res.status(500).json({ message: "Login failed" });
+        }
+        return res.status(200).json(user);
+      });
+    } catch (error: any) {
+      console.error("Google authentication error:", error);
+      return res.status(500).json({ 
+        message: "Authentication failed", 
+        error: error.message || "Unknown error" 
+      });
+    }
+  });
 
   // Set up scheduled messages from active personas
   setupScheduledMessages();
