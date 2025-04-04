@@ -187,16 +187,35 @@ export async function handleRedirectResult() {
     });
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Server authentication failed:", response.status, errorText);
-      throw new Error(`Failed to authenticate with server: ${response.status} ${errorText}`);
+      // Try to get the error message
+      let errorMessage = "Authentication failed";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorMessage;
+      } catch (e) {
+        try {
+          errorMessage = await response.text();
+        } catch (e2) {
+          // If we can't parse JSON or get text, use status code
+          errorMessage = `Error ${response.status}: Authentication failed`;
+        }
+      }
+      
+      console.error("Server authentication failed:", errorMessage);
+      throw new Error(errorMessage);
     }
     
     const userData = await response.json();
-    console.log("Server authentication successful");
+    console.log("Server authentication successful, user data:", userData);
     return userData;
   } catch (error) {
     console.error("Error handling redirect result:", error);
+    // Display more comprehensive error information
+    if (error instanceof Error) {
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
     throw error;
   }
 }

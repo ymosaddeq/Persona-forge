@@ -80,27 +80,11 @@ function Router() {
 }
 
 function App() {
-  // Handle Firebase authentication redirect on app load
+  // No need to handle Firebase authentication redirect here anymore
+  // It's now handled in the AuthProvider component's useEffect
+  // This prevents duplicate processing of the redirect result
   useEffect(() => {
-    // Log that we're handling the redirect
-    console.log("Checking for Firebase redirect result...");
-    
-    // This will process any pending Firebase redirect sign-in
-    handleRedirectResult()
-      .then((user) => {
-        if (user) {
-          // Successfully signed in and received user data from server
-          console.log("User signed in after redirect:", user);
-          // Update the user data in React Query cache
-          queryClient.setQueryData(["/api/user"], user);
-          queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-        } else {
-          console.log("No redirect result found or user already authenticated");
-        }
-      })
-      .catch((error) => {
-        console.error("Error handling redirect:", error);
-      });
+    console.log("App component mounted");
   }, []);
 
   return (

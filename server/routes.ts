@@ -83,6 +83,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No token provided" });
       }
       
+      // Log details about the request
+      console.log("Google auth request received with token:", token.substring(0, 10) + "...");
+      
       // Import verifyFirebaseToken from firebase-admin.ts
       const { verifyFirebaseToken } = await import("./firebase-admin");
       
@@ -90,8 +93,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const decodedToken = await verifyFirebaseToken(token);
       
       if (!decodedToken) {
-        return res.status(401).json({ message: "Invalid token" });
+        console.error("Token verification failed, token invalid or expired");
+        return res.status(401).json({ message: "Invalid or expired token" });
       }
+      
+      console.log("Token verified for user:", decodedToken.email);
       
       // Get or create user by Google ID
       const googleId = decodedToken.uid;
@@ -99,37 +105,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const name = decodedToken.name || email.split('@')[0] || 'Google User';
       const picture = decodedToken.picture || null;
       
+      console.log(`Processing Google user: ID=${googleId}, Email=${email}, Name=${name}`);
+      
       // Check if user exists by Google ID
       let user = await storage.getUserByGoogleId(googleId);
       
-      if (!user) {
+      if (user) {
+        console.log("Existing user found by Google ID:", user.id);
+      } else {
         // Check if user exists by email
         const existingUserByEmail = await storage.getUserByEmail(email);
         
         if (existingUserByEmail) {
+          console.log("Existing user found by email:", existingUserByEmail.id);
           // Update existing user with Google ID
           user = await storage.updateUserGoogleId(existingUserByEmail.id, googleId, picture);
           if (!user) {
+            console.error("Failed to update user with Google ID:", existingUserByEmail.id);
             return res.status(500).json({ message: "Failed to update user with Google ID" });
           }
+          console.log("User updated with Google ID:", user.id);
         } else {
+          console.log("Creating new user for Google account");
           // Create new user
-          user = await storage.createUser({
-            username: name,
-            email: email,
-            password: "", // Empty string for Google auth users
-            googleId: googleId,
-            profilePicture: picture
-          });
+          try {
+            user = await storage.createUser({
+              username: name,
+              email: email,
+              password: "", // Empty string for Google auth users
+              googleId: googleId,
+              profilePicture: picture
+            });
+            console.log("New user created:", user.id);
+          } catch (createError: any) {
+            console.error("Error creating user:", createError);
+            // Check if it's a duplicate username error
+            if (createError.message?.includes('duplicate key') && createError.message?.includes('username')) {
+              // Generate a unique username by adding a timestamp
+              const uniqueName = `${name}_${Date.now().toString().slice(-4)}`;
+              console.log("Attempting with unique username:", uniqueName);
+              user = await storage.createUser({
+                username: uniqueName,
+                email: email,
+                password: "", // Empty string for Google auth users
+                googleId: googleId,
+                profilePicture: picture
+              });
+              console.log("New user created with modified username:", user.id);
+            } else {
+              throw createError; // Re-throw if it's not a username conflict
+            }
+          }
         }
       }
       
-      // Login the user
+      // Login the user through Passport
+      console.log("Logging in user via Passport:", user.id);
       req.login(user, (err: any) => {
         if (err) {
           console.error("Error logging in user:", err);
-          return res.status(500).json({ message: "Login failed" });
+          return res.status(500).json({ message: "Login failed", error: err.message });
         }
+        console.log("User successfully logged in:", user.id);
         return res.status(200).json(user);
       });
     } catch (error: any) {

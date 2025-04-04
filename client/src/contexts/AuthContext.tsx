@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext } from "react";
+import { createContext, ReactNode, useContext, useEffect } from "react";
 import {
   useQuery,
   useMutation,
@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { signInWithGoogle, signOutFirebase } from "../lib/firebase";
+import { signInWithGoogle, signOutFirebase, handleRedirectResult } from "../lib/firebase";
 
 // Types
 interface User {
@@ -56,10 +56,44 @@ function AuthProvider({ children }: { children: ReactNode }) {
     data: user,
     error,
     isLoading,
+    refetch
   } = useQuery<User | null, Error>({
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
+  
+  // Handle Firebase redirect result on component mount
+  useEffect(() => {
+    const processRedirectResult = async () => {
+      try {
+        console.log("Checking for Firebase redirect result in AuthProvider");
+        const userData = await handleRedirectResult();
+        
+        if (userData) {
+          console.log("Received user data after redirect:", userData);
+          // Update React Query cache with the user data
+          queryClient.setQueryData(["/api/user"], userData);
+          
+          toast({
+            title: "Google login successful",
+            description: `Welcome, ${userData.username}!`,
+          });
+          
+          // Refetch user data to ensure we have the latest
+          refetch();
+        }
+      } catch (error) {
+        console.error("Error processing redirect result:", error);
+        toast({
+          title: "Google login failed",
+          description: error instanceof Error ? error.message : "Authentication failed",
+          variant: "destructive",
+        });
+      }
+    };
+    
+    processRedirectResult();
+  }, [toast, refetch]);
 
   // Login mutation
   const loginMutation = useMutation({
