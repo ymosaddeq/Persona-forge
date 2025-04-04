@@ -12,24 +12,44 @@ import {
 
 // Get the Replit hostname for authorization
 const getReplicateCompatibleSettings = () => {
+  // Check if we're on Replit
   const isReplit = window.location.hostname.includes('.replit.dev') || 
                   window.location.hostname.includes('.repl.co') || 
                   window.location.hostname.includes('.replit.app');
   
+  // Get the full current URL for logging
+  const currentUrl = window.location.href;
+  console.log("Current application URL:", currentUrl);
+  
+  // Get the hostname
+  const hostname = window.location.hostname;
+  console.log("Current hostname:", hostname);
+  
   // If we're on Replit, we need to use the current domain
+  // Otherwise use the Firebase default domain
   const authDomain = isReplit 
-    ? window.location.hostname 
+    ? hostname 
     : `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`;
   
   console.log("Using auth domain:", authDomain);
   
   return {
     authDomain,
-    isReplit
+    isReplit,
+    hostname
   };
 };
 
-const { authDomain } = getReplicateCompatibleSettings();
+const { authDomain, hostname } = getReplicateCompatibleSettings();
+
+// Display a warning if we detect we're in a Replit environment
+if (hostname.includes('.replit.dev') || hostname.includes('.repl.co')) {
+  console.warn(`
+    IMPORTANT: For Google authentication to work, you must add 
+    "${hostname}" to your Firebase Console's authorized domains list.
+    Go to: Firebase Console > Authentication > Settings > Authorized domains
+  `);
+}
 
 // Firebase configuration
 const firebaseConfig = {
@@ -99,13 +119,32 @@ export async function signInWithGoogle() {
         
         // Provide more specific error messages based on Firebase error codes
         if (firebaseError.code === 'auth/configuration-not-found') {
-          throw new Error("Firebase authentication is not properly configured for this domain. Please contact support.");
+          // This is a common error when the domain isn't added to Firebase authorized domains
+          console.error(`
+            ======================================
+            CRITICAL FIREBASE CONFIGURATION ERROR
+            ======================================
+            Your domain "${hostname}" is not authorized in the Firebase Console.
+            
+            To fix this:
+            1. Go to the Firebase Console: https://console.firebase.google.com/
+            2. Select your project: "${import.meta.env.VITE_FIREBASE_PROJECT_ID}"
+            3. Go to Authentication > Settings > Authorized domains
+            4. Add "${hostname}" to the list of authorized domains
+            5. Save changes and try again
+            ======================================
+          `);
+          throw new Error(
+            "Firebase authentication is not configured for this domain. You need to add this domain to Firebase authorized domains list."
+          );
         } else if (firebaseError.code === 'auth/popup-blocked') {
           throw new Error("Popup was blocked by your browser. Please allow popups for this site.");
         } else if (firebaseError.code === 'auth/cancelled-popup-request') {
           throw new Error("Authentication was cancelled. Please try again.");
         } else if (firebaseError.code === 'auth/network-request-failed') {
           throw new Error("Network error. Please check your internet connection and try again.");
+        } else if (firebaseError.code === 'auth/invalid-api-key') {
+          throw new Error("Invalid Firebase API key. Please check your environment variables.");
         }
       }
     }

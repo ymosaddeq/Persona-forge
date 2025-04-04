@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { Redirect, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
+import { FirebaseConfigAlert } from "@/components/auth/FirebaseConfigAlert";
 import { Separator } from "@/components/ui/separator";
 
 const loginSchema = z.object({
@@ -240,6 +241,7 @@ export default function AuthPage() {
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <FirebaseConfigAlert />
               <TabsList className="grid w-full grid-cols-2 mb-4">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Register</TabsTrigger>
