@@ -11,6 +11,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { Redirect, useLocation } from "wouter";
 import { useEffect, useState } from "react";
+import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
+import { Separator } from "@/components/ui/separator";
 
 const loginSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -105,6 +107,19 @@ export default function AuthPage() {
               "Login"
             )}
           </Button>
+          
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <Separator className="w-full" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or
+              </span>
+            </div>
+          </div>
+          
+          <GoogleLoginButton />
         </form>
       </Form>
     );
@@ -195,6 +210,19 @@ export default function AuthPage() {
               "Register"
             )}
           </Button>
+          
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <Separator className="w-full" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or
+              </span>
+            </div>
+          </div>
+          
+          <GoogleLoginButton />
         </form>
       </Form>
     );

@@ -7,7 +7,9 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"),  // Null for Google auth users
+  googleId: text("google_id").unique(),  // For Google authentication
+  profilePicture: text("profile_picture"),  // Profile picture URL
   role: text("role").notNull().default("user"),
   apiUsage: integer("api_usage").notNull().default(0),
   usageLimit: integer("usage_limit").notNull().default(100),
@@ -20,9 +22,32 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
   updatedAt: true,
   apiUsage: true,
+  googleId: true,
+  profilePicture: true,
 }).extend({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+// Phone number pool for validated WhatsApp numbers
+export const phoneNumberPool = pgTable("phone_number_pool", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  phoneNumber: text("phone_number").notNull().unique(),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  assignedToPersonaId: integer("assigned_to_persona_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPhoneNumberSchema = createInsertSchema(phoneNumberPool).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  isVerified: true,
+  assignedToPersonaId: true,
+}).extend({
+  phoneNumber: z.string().min(10, "Please enter a valid phone number"),
 });
 
 // Persona templates - predefined persona types
@@ -119,6 +144,9 @@ export const traitSchema = z.object({
 // Export types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export type InsertPhoneNumber = z.infer<typeof insertPhoneNumberSchema>;
+export type PhoneNumber = typeof phoneNumberPool.$inferSelect;
 
 export type InsertPersonaTemplate = z.infer<typeof insertPersonaTemplateSchema>;
 export type PersonaTemplate = typeof personaTemplates.$inferSelect;

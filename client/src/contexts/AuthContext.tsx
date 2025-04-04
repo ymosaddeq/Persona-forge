@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { signInWithGoogle, signOutFirebase } from "../lib/firebase";
 
 // Types
 interface User {
@@ -15,6 +16,8 @@ interface User {
   role: string;
   apiUsage: number;
   usageLimit: number;
+  profilePicture: string | null;
+  googleId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +40,7 @@ interface AuthContextType {
   loginMutation: UseMutationResult<User, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<User, Error, RegisterData>;
+  googleLoginMutation: UseMutationResult<User, Error, void>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -96,7 +100,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
+      // Sign out from both Firebase and session
+      if (user?.googleId) {
+        await signOutFirebase();
+      } else {
+        await apiRequest("POST", "/api/logout");
+      }
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/user"], null);
@@ -114,6 +123,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const googleLoginMutation = useMutation<User, Error, void>({
+    mutationFn: async () => {
+      try {
+        return await signInWithGoogle();
+      } catch (error) {
+        console.error("Google login error:", error);
+        throw new Error(error instanceof Error ? error.message : "Google login failed");
+      }
+    },
+    onSuccess: (user: User) => {
+      queryClient.setQueryData(["/api/user"], user);
+      toast({
+        title: "Login successful",
+        description: `Welcome, ${user.username}!`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Google login failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
   return (
     <AuthContext.Provider
       value={{
@@ -123,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
+        googleLoginMutation,
       }}
     >
       {children}

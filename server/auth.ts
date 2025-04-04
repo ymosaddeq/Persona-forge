@@ -6,9 +6,10 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { db } from "./db";
 import { users, User } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, or } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import pg from "pg";
+import { verifyFirebaseToken } from './firebase-admin';
 
 // Create a connection pool for sessions
 const pool = new pg.Pool({
@@ -43,7 +44,9 @@ async function hashPassword(password: string) {
 }
 
 // Compare the supplied password with the stored hashed password
-async function comparePasswords(supplied: string, stored: string) {
+async function comparePasswords(supplied: string, stored: string | null) {
+  if (!stored) return false;
+  
   const [hashed, salt] = stored.split(".");
   const hashedBuf = Buffer.from(hashed, "hex");
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
@@ -234,6 +237,105 @@ export function setupAuth(app: Express) {
       }
       res.status(200).json({ message: "Logged out successfully" });
     });
+  });
+
+  // Google Auth endpoint
+  app.post("/api/auth/google", async (req, res, next) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ message: "Token is required" });
+      }
+      
+      // Verify the Firebase token
+      const decodedToken = await verifyFirebaseToken(token);
+      
+      if (!decodedToken) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+      
+      const { email, name, picture, uid } = decodedToken;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      // Check if user exists with this Google ID
+      let [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.googleId, uid));
+      
+      // If not found by Google ID, check by email
+      if (!user) {
+        [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, email));
+        
+        // If found by email but not linked to Google yet, update the Google ID
+        if (user) {
+          [user] = await db
+            .update(users)
+            .set({ 
+              googleId: uid,
+              profilePicture: picture || user.profilePicture
+            })
+            .where(eq(users.id, user.id))
+            .returning();
+        }
+      }
+      
+      // If user doesn't exist, create a new one
+      if (!user) {
+        // Generate a username from email if not provided
+        const username = name || email.split('@')[0];
+        
+        // Check if username exists
+        let uniqueUsername = username;
+        let counter = 1;
+        
+        while (true) {
+          const [existingUser] = await db
+            .select()
+            .from(users)
+            .where(eq(users.username, uniqueUsername));
+          
+          if (!existingUser) break;
+          
+          // If username exists, append a number and try again
+          uniqueUsername = `${username}${counter++}`;
+        }
+        
+        // Create new user with Google info
+        [user] = await db
+          .insert(users)
+          .values({
+            username: uniqueUsername,
+            email,
+            googleId: uid,
+            password: null, // No password for Google auth
+            profilePicture: picture || null,
+            role: "user",
+            apiUsage: 0,
+            usageLimit: 100
+          })
+          .returning();
+      }
+      
+      // Log the user in
+      req.login(user, (err) => {
+        if (err) return next(err);
+        
+        // Don't send the password back to the client
+        const { password, ...userWithoutPassword } = user;
+        res.status(200).json(userWithoutPassword);
+      });
+    } catch (error) {
+      console.error("Error during Google authentication:", error);
+      res.status(500).json({ message: "Authentication failed" });
+    }
   });
 
   // Get current user endpoint
